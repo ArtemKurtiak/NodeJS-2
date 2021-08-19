@@ -107,7 +107,7 @@ app.get('/users/:userId', (req, res) => {
         return;
     };
 
-    return res.render('user', { email: user.email, id: user.id, password: user.password })
+    return res.render('user', { ...user })
 })
 
 app.listen(PORT, () => {
