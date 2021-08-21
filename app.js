@@ -1,13 +1,22 @@
 const express = require('express');
 const path = require('path');
 const handlebars = require('express-handlebars');
+const fs = require('fs');
+const util = require('util');
+
 
 const { PORT } = require("./constants/config");
-const { users } = require("./db/users");
+
+
+const readFilePromise = util.promisify(fs.readFile);
+const writeFilePromise = util.promisify(fs.writeFile);
+
 
 const app = express();
 
 const templatesPath = path.join(__dirname, 'static');
+const usersPath = path.join(__dirname, 'db', 'users.json');
+
 
 app.use(express.static(templatesPath));
 app.use(express.json());
@@ -24,17 +33,32 @@ const validateEmail = (email) => {
     return emailRegexp.test(email);
 };
 
+const getUsers = async () => {
+    const users = await readFilePromise(usersPath);
+    return JSON.parse(users);
+};
 
-const getUserByEmail = (email) => {
-    return users.find((user) => user.email === email);
-}
+const addUser = async (user) => {
+    const users = await getUsers();
+    users.push(user);
+    console.log(users)
+
+    await writeFilePromise(usersPath, JSON.stringify(users));
+};
+
+const getUserByEmail = async (email) => {
+    const users = await getUsers();
+
+    const userByEmail = await users.find((user) => user.email === email);
+    return userByEmail;
+};
 
 
 app.get('/register', (req, res) => {
     return res.render('register');
 });
 
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
     const { email, password } = req.body;
 
     const validationResult = validateEmail(email);
@@ -44,14 +68,14 @@ app.post('/register', (req, res) => {
         return;
     }
 
-    const existsUser = getUserByEmail(email);
+    const existsUser = await getUserByEmail(email);
 
     if (existsUser) {
         res.redirect('/error/Email already in use/login/Login');
         return;
     }
 
-    users.push({
+    await addUser({
         email,
         password,
         id: Date.now() // Id can be same, but for this app it is good
@@ -65,7 +89,7 @@ app.get('/login', (req, res) => {
    return res.render('login');
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     const validationResult = validateEmail(email);
@@ -75,7 +99,7 @@ app.post('/login', (req, res) => {
         return;
     }
 
-    const user = getUserByEmail(email);
+    const user = await getUserByEmail(email);
 
     if (!user || !(user?.password === password)) {
         res.redirect('/error/Incorrect credentials/login/Login');
@@ -87,8 +111,10 @@ app.post('/login', (req, res) => {
 });
 
 
-app.get('/users', (req, res) => {
-   return res.render('users', { users: users });
+app.get('/users', async (req, res) => {
+    const users = await getUsers();
+
+   return res.render('users', { users });
 });
 
 
@@ -97,8 +123,10 @@ app.get('/error/:errorText/:linkUrl/:linkTitle', (req, res) => {
 });
 
 
-app.get('/users/:userId', (req, res) => {
+app.get('/users/:userId', async (req, res) => {
     const { userId } = req.params;
+
+    const users = await getUsers();
 
     const user = users.find((user) => user.id === Number(userId));
 
